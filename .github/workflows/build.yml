@@ -1,14 +1,17 @@
-name: Build Electron App
+name: Build and Release
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        
+    runs-on: ${{ matrix.os }}
     
     steps:
     - name: Checkout repository
@@ -23,11 +26,38 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Build Windows App
+    - name: Build App (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: npm run build:linux
+      
+    - name: Build App (Windows)
+      if: matrix.os == 'windows-latest'
       run: npm run build:win
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gphotos-uploader-windows
-        path: dist/*.exe
+        name: gphotos-uploader-${{ matrix.os }}
+        path: |
+          dist/*.exe
+          dist/*.AppImage
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-files
+          merge-multiple: true
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-files/*.exe
+            dist-files/*.AppImage
+          generate_release_notes: true

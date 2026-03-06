@@ -1,0 +1,33 @@
+name: Build Electron App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build Windows App
+      run: npm run build:win
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gphotos-uploader-windows
+        path: dist/*.exe

@@ -31,27 +31,76 @@ export async function uploadPhotoBytes(filePath: string): Promise<string> {
 
   const fileName = path.basename(filePath)
   const mimeType = mime.lookup(filePath) || 'application/octet-stream'
+  const stat = fs.statSync(filePath)
+  const fileSize = stat.size
 
-  // Read the whole file into buffer, this avoids stream compatibility issues with different fetch implementations
-  const fileBuffer = fs.readFileSync(filePath)
-
-  const response = await fetch('https://photoslibrary.googleapis.com/v1/uploads', {
+  // 1. Initiate Resumable Upload Session
+  const initResponse = await fetch('https://photoslibrary.googleapis.com/v1/uploads', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/octet-stream',
+      'Content-Length': '0',
+      'X-Goog-Upload-Command': 'start',
       'X-Goog-Upload-Content-Type': mimeType,
-      'X-Goog-Upload-Protocol': 'raw',
-      'X-Goog-Upload-File-Name': fileName
-    },
-    body: fileBuffer
+      'X-Goog-Upload-File-Name': fileName,
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Raw-Size': fileSize.toString()
+    }
   })
 
-  if (!response.ok) {
-    throw new Error(`Failed to upload photo bytes: ${response.statusText}`)
+  if (!initResponse.ok) {
+    const errorText = await initResponse.text()
+    throw new Error(`Failed to initiate resumable upload: ${initResponse.statusText} - ${errorText}`)
   }
-  
-  return await response.text();
+
+  const sessionUrl = initResponse.headers.get('x-goog-upload-url')
+  if (!sessionUrl) {
+    throw new Error('Upload session URL not returned from Google Photos API')
+  }
+
+  // 2. Upload in Chunks
+  // Chunk size must be a multiple of 256 KB (262144 bytes). Here we use 8 * 256 KB = 2 MB
+  const chunkSize = 262144 * 8
+  let offset = 0
+  let uploadToken = ''
+
+  const fd = fs.openSync(filePath, 'r')
+
+  try {
+    while (offset < fileSize) {
+      const end = Math.min(offset + chunkSize, fileSize)
+      const length = end - offset
+      const isLastChunk = end === fileSize
+      const chunkBuffer = Buffer.alloc(length)
+
+      fs.readSync(fd, chunkBuffer, 0, length, offset)
+
+      const uploadResponse = await fetch(sessionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Length': length.toString(),
+          'X-Goog-Upload-Command': isLastChunk ? 'upload, finalize' : 'upload',
+          'X-Goog-Upload-Offset': offset.toString()
+        },
+        body: chunkBuffer
+      })
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text()
+        throw new Error(`Failed to upload chunk at offset ${offset}: ${uploadResponse.statusText} - ${errorText}`)
+      }
+
+      if (isLastChunk) {
+        uploadToken = await uploadResponse.text()
+      }
+
+      offset = end
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+
+  return uploadToken;
 }
 
 export async function batchCreateMediaItems(albumId: string, uploadTokens: { token: string; fileName: string }[]): Promise<any> {

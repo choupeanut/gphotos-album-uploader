@@ -1,6 +1,10 @@
 # GPhotos Album Uploader
 
-A cross-platform desktop application built with Electron, React, and TypeScript that automates uploading local photo directories to Google Photos. It retains your local folder structure by automatically creating matching albums in your Google Photos account.
+**The Core Problem:** Currently, the official Google Photos app does not support uploading photos while preserving your local folder or Android album structures. All backed-up photos are mixed into a single timeline, losing your existing organization.
+
+**The Solution:** This repository provides tools to solve this pain point, ensuring your photo organization is preserved in the cloud:
+1. **Desktop App:** A cross-platform application (Electron/React) that uploads local folders to Google Photos, automatically creating matching albums to retain your PC's directory structure.
+2. **Mobile App:** An Android application (Flutter) that directly reads local albums on your Android device (supporting albums created by any Android manufacturer) and backs them up into corresponding Google Photos albums.
 
 [中文說明 (Traditional Chinese)](README.zh-TW.md)
 
